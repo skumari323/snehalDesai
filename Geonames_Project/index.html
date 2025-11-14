@@ -1,1 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Snehal Geonames Table</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
 
+  <h1>Snehal Geonames Table</h1>
+
+  <table>
+    <thead>
+      <tr>
+        <th>API Name</th>
+        <th>API Description</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <!-- Address API -->
+      <tr>
+        <td><strong>Address API</strong></td>
+        <td>
+          <p>Returns the nearest address for a given latitude and longitude.</p>
+          <label>Latitude:</label><br>
+          <input type="number" id="addrLat" value="47.3" step="any"><br>
+          <label>Longitude:</label><br>
+          <input type="number" id="addrLng" value="9" step="any">
+        </td>
+        <td>
+          <button onclick="callAddressAPI()">Call API</button>
+          <pre id="addrResult"></pre>
+        </td>
+      </tr>
+
+      <!-- Earthquake API -->
+      <tr>
+        <td><strong>Earthquake API</strong></td>
+        <td>
+          <p>Lists earthquakes within a bounding box and magnitude range.</p>
+          <label>North:</label><br>
+          <input type="number" id="eqNorth" value="44" step="any"><br>
+          <label>South:</label><br>
+          <input type="number" id="eqSouth" value="40" step="any"><br>
+          <label>East:</label><br>
+          <input type="number" id="eqEast" value="15" step="any"><br>
+          <label>West:</label><br>
+          <input type="number" id="eqWest" value="10" step="any"><br>
+          <label>Minimum Magnitude:</label><br>
+          <input type="number" id="eqMinMag" value="4" step="any">
+        </td>
+        <td>
+          <button onclick="callEarthquakeAPI()">Call API</button>
+          <pre id="eqResult"></pre>
+        </td>
+      </tr>
+
+      <!-- Weather API -->
+      <tr>
+        <td><strong>Weather API</strong></td>
+        <td>
+          <p>Retrieves current weather observations for a nearby location.</p>
+          <label>Latitude:</label><br>
+          <input type="number" id="wxLat" value="40.7128" step="any"><br>
+          <label>Longitude:</label><br>
+          <input type="number" id="wxLng" value="-74.0060" step="any">
+        </td>
+        <td>
+          <button onclick="callWeatherAPI()">Call API</button>
+          <pre id="wxResult"></pre>
+        </td>
+      </tr>
+
+    </tbody>
+  </table>
+
+  <!-- jQuery first, then your JS -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+
+  <script src="js/script.js"></script>
+
+</body>
+</html>
