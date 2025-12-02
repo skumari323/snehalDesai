@@ -1,0 +1,75 @@
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+}
+
+/* Map styling */
+#map {
+    height: 100vh;
+    width: calc(100% - 280px);
+    margin-left: 280px;
+    transition: 0.3s ease;
+}
+
+/* Sidebar */
+#sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    height: 100vh;
+    background: #f8f9fa;
+    border-right: 1px solid #ddd;
+    padding: 20px;
+    overflow-y: auto;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    transition: 0.3s ease;
+}
+
+/* Sidebar collapsed */
+#sidebar.collapsed {
+    left: -280px;
+}
+
+#map.expanded {
+    margin-left: 0;
+    width: 100%;
+}
+
+/* Toggle button */
+#sidebarToggle {
+    position: fixed;
+    top: 20px;
+    left: 15px;
+    background: #ffffff;
+    padding: 10px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    z-index: 9999;
+    border: 1px solid #ddd;
+    box-shadow: 0 0 6px rgba(0,0,0,0.2);
+    transition: 0.3s ease;
+}
+
+#sidebarToggle:hover {
+    background: #f0f0f0;
+}
+
+#sidebarToggle i {
+    font-size: 18px;
+}
+
+/* Country info */
+#countryInfo h5 {
+    margin-top: 20px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 5px;
+}
+
+#countryInfo p {
+    margin-bottom: 8px;
+}
+
+
