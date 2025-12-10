@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<geonames>
+    <country>
+        <countryCode>AO</countryCode>
+        <countryName>Angola</countryName>
+        <isoNumeric>024</isoNumeric>
+        <isoAlpha3>AGO</isoAlpha3>
+        <fipsCode>AO</fipsCode>
+        <continent>AF</continent>
+        <continentName>Africa</continentName>
+        <capital>Luanda</capital>
+        <areaInSqKm>1246700.0</areaInSqKm>
+        <population>30809762</population>
+        <currencyCode>AOA</currencyCode>
+        <languages>pt-AO</languages>
+        <geonameId>3351879</geonameId>
+        <west>11.670196277</west>
+        <north>-4.3880634</north>
+        <east>24.0878856</east>
+        <south>-18.039104000000002</south>
+        <postalCodeFormat/>
+    </country>
+</geonames>
