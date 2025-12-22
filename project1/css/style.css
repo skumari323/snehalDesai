@@ -1,0 +1,117 @@
+
+
+
+    html, body {
+            height: 100%;
+            margin: 0;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        .floating-select {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 260px;
+            z-index: 9999;
+        }
+
+
+
+/* ===============================
+   Floating Country Select
+   =============================== */
+.floating-select {
+    position: absolute;
+    top: 15%;            /* vertically center */
+    left: 50%;           /* horizontally center */
+    transform: translate(-50%, -50%);
+    width: 260px;
+    z-index: 10000;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
+}
+
+/* Hover effect for select */
+.floating-select select {
+    cursor: pointer;
+}
+
+/* ===============================
+   Reset Button
+   =============================== */
+#resetSelect {
+    z-index: 10000;
+    transition: all 0.3s ease;
+}
+
+/* ===============================
+   EasyButton Spacing
+   =============================== */
+.leaflet-control-easybutton {
+    margin-bottom: 8px;
+}
+
+/* ===============================
+   Modals
+   =============================== */
+.modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* ===============================
+   Marker Popups
+   =============================== */
+.leaflet-popup-content {
+    font-size: 14px;
+}
+
+/* ===============================
+   Responsive Adjustments
+   =============================== */
+@media (max-width: 576px) {
+    .floating-select {
+        width: 200px;
+        padding: 10px 12px;
+    }
+}
+
+
+#forecastContainer .card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    width: 100px;
+    text-align: center;
+    padding: 5px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+#forecastContainer .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+#forecastContainer i {
+    display: block;
+    margin: 0 auto 5px auto;
+}
+
+
+/* PRELOADER */
+#preloader {
+    position: fixed;
+    inset: 0;
+    background: #ffffff;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+
+
