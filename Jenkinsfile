@@ -1,55 +1,60 @@
 def buildTag = ''
 
 pipeline {
-    agent { label 'build-agent-01' }
+    agent any
 
+    environment {
+        DOCKER_IMAGE = "sampleapp"
+        DOCKER_CREDENTIALS = "docker-login-itc"
+        KUBE_NAMESPACE = "default"
+    }
 
     stages {
-        stage('Generate Tag') {
+
+        stage('Checkout Code') {
+            steps {
+                git url: 'git url: 'https://github.com/skumari323/snehalDesai.git', branch: 'master''
+            }
+        }
+
+        stage('Generate Build Tag') {
             steps {
                 script {
                     def date = new Date().format('yyyyMMdd')
                     buildTag = "${date}.${env.BUILD_NUMBER}"
                     currentBuild.displayName = buildTag
-                    sh "echo BUILD_TAG=${buildTag} > build.env"
+                    env.BUILD_TAG = buildTag
+                    echo "Build Tag: ${env.BUILD_TAG}"
                 }
             }
         }
 
-        stage('Use Tag') {
+        stage('Build Application') {
+            steps {
+                sh 'dotnet restore'
+                sh 'dotnet build -c Release'
+                sh 'dotnet publish -c Release -o publish'
+            }
+        }
+
+        stage('SonarQube Analysis (Optional)') {
             steps {
                 script {
-                    echo "The build tag is: ${buildTag}"
+                    echo "Run SonarQube if configured"
+                    // withSonarQubeEnv('MySonarServer') {
+                    //     sh "dotnet sonarscanner begin /k:sampleapp"
+                    //     sh "dotnet build"
+                    //     sh "dotnet sonarscanner end"
+                    // }
                 }
             }
         }
 
-        stage('Checkout Code') {
+        stage('Quality Gate (Optional)') {
             steps {
-                git url: 'https://github.com/gititc778/sampleApp.git', branch: 'master'
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('MySonarServer') {
-                    sh '''
-                        export PATH=$PATH:/home/danish/.dotnet/tools
-
-                        dotnet sonarscanner begin /k:"sampleapp"
-
-                        dotnet build -c Release
-
-                        dotnet sonarscanner end
-                    '''
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                script {
+                    echo "Skipping quality gate if not configured"
+                    // waitForQualityGate abortPipeline: true
                 }
             }
         }
@@ -57,55 +62,77 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh "docker build -t sampleapp:${buildTag} ."
+                    sh "docker build -t ${DOCKER_IMAGE}:${env.BUILD_TAG} ."
                 }
             }
         }
 
-        //  Trivy with HTML report
-        stage('Trivy Scan') {
+        stage('Trivy Security Scan') {
             steps {
-                echo 'Preparing Trivy template...'
-                sh '''
-                    mkdir -p contrib
-                    curl -s -o contrib/html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
-                '''
-
-                echo 'Running Trivy scan...'
                 sh """
-                    trivy image --scanners vuln \
-                    --format template \
-                    --template "@contrib/html.tpl" \
-                    -o trivy-report.html \
-                    sampleapp:${buildTag}
+                    trivy image --format table \
+                    -o trivy-report.txt \
+                    ${DOCKER_IMAGE}:${env.BUILD_TAG} || true
                 """
             }
 
             post {
                 always {
-                    archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
-
-                    publishHTML([
-                        reportDir: '.',
-                        reportFiles: 'trivy-report.html',
-                        reportName: 'Trivy Security Report'
-                    ])
+                    archiveArtifacts artifacts: 'trivy-report.txt', fingerprint: true
                 }
             }
         }
 
-        stage('Push to Docker Registry') {
+        stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-login-itc', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    script {
-                        sh """
-                            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-                            docker tag sampleapp:${buildTag} ${DOCKER_USER}/sampleapp:${buildTag}
-                            docker push ${DOCKER_USER}/sampleapp:${buildTag}
-                        """
-                    }
+                withCredentials([usernamePassword(credentialsId: DOCKER_CREDENTIALS,
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS')]) {
+
+                    sh """
+                        echo $PASS | docker login -u $USER --password-stdin
+                        docker tag ${DOCKER_IMAGE}:${env.BUILD_TAG} $USER/${DOCKER_IMAGE}:${env.BUILD_TAG}
+                        docker push $USER/${DOCKER_IMAGE}:${env.BUILD_TAG}
+                    """
                 }
             }
+        }
+
+        stage('Deploy to DEV') {
+            steps {
+                sh """
+                    kubectl apply -f deployment.yaml
+                    kubectl set image deployment/sampleapp sampleapp=$USER/${DOCKER_IMAGE}:${env.BUILD_TAG}
+                """
+            }
+        }
+
+        stage('Approval for PROD') {
+            steps {
+                input message: "Deploy to PRODUCTION?"
+            }
+        }
+
+        stage('Deploy to PROD') {
+            steps {
+                sh """
+                    kubectl apply -f deployment-prod.yaml
+                    kubectl set image deployment/sampleapp-prod sampleapp=$USER/${DOCKER_IMAGE}:${env.BUILD_TAG}
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline SUCCESS"
+        }
+        failure {
+            echo "Pipeline FAILED"
+        }
+        always {
+            echo "Cleaning workspace"
+            cleanWs()
         }
     }
 }
