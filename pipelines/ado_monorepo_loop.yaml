@@ -1,0 +1,145 @@
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+parameters:
+- name: services
+  type: object
+  default:
+    - Frontend
+    - PatientApi
+    - DoctorApi
+    - AppointmentApi
+    - BillingApi
+    - PharmacyApi
+    - NotificationApi
+
+stages:
+
+# ==========================================================
+# Detect Changes
+# ==========================================================
+- stage: DetectChanges
+
+  jobs:
+
+  - job: Detect
+
+    steps:
+
+    - checkout: self
+      fetchDepth: 0
+
+    - bash: |
+
+        CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+
+        SERVICES=(
+          Frontend
+          PatientApi
+          DoctorApi
+          AppointmentApi
+          BillingApi
+          PharmacyApi
+          NotificationApi
+        )
+
+        for SERVICE in "${SERVICES[@]}"
+        do
+
+          echo "##vso[task.setvariable variable=${SERVICE}Changed;isOutput=true]false"
+
+          if echo "$CHANGED_FILES" | grep -q "^${SERVICE}/"; then
+              echo "$SERVICE changed"
+              echo "##vso[task.setvariable variable=${SERVICE}Changed;isOutput=true]true"
+          fi
+
+        done
+
+      name: DetectChanges
+
+# ==========================================================
+# Build
+# ==========================================================
+- stage: Build
+
+  dependsOn: DetectChanges
+
+  variables:
+
+    FrontendChanged:      $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.FrontendChanged'] ]
+    PatientApiChanged:    $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.PatientApiChanged'] ]
+    DoctorApiChanged:     $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.DoctorApiChanged'] ]
+    AppointmentApiChanged:$[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.AppointmentApiChanged'] ]
+    BillingApiChanged:    $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.BillingApiChanged'] ]
+    PharmacyApiChanged:   $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.PharmacyApiChanged'] ]
+    NotificationApiChanged:$[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.NotificationApiChanged'] ]
+
+  jobs:
+
+  - ${{ each service in parameters.services }}:
+
+    - job: Build_${{ service }}
+
+      condition: eq(variables['${{ service }}Changed'], 'true')
+
+      steps:
+
+      - script: |
+          echo "Building ${{ service }}"
+
+      - script: |
+          docker build \
+            -t myacr.azurecr.io/${{ lower(service) }}:$(Build.BuildId) \
+            ${{ service }}
+
+      - script: |
+          docker push myacr.azurecr.io/${{ lower(service) }}:$(Build.BuildId)
+
+# ==========================================================
+# Deploy
+# ==========================================================
+- stage: Deploy
+
+  dependsOn: Build
+
+  variables:
+
+    FrontendChanged:      $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.FrontendChanged'] ]
+    PatientApiChanged:    $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.PatientApiChanged'] ]
+    DoctorApiChanged:     $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.DoctorApiChanged'] ]
+    AppointmentApiChanged:$[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.AppointmentApiChanged'] ]
+    BillingApiChanged:    $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.BillingApiChanged'] ]
+    PharmacyApiChanged:   $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.PharmacyApiChanged'] ]
+    NotificationApiChanged:$[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.NotificationApiChanged'] ]
+
+  jobs:
+
+  - ${{ each service in parameters.services }}:
+
+    - deployment: Deploy_${{ service }}
+
+      condition: eq(variables['${{ service }}Changed'], 'true')
+
+      environment: dev
+
+      strategy:
+
+        runOnce:
+
+          deploy:
+
+            steps:
+
+            - script: |
+                echo "Deploying ${{ service }}"
+
+            - task: KubernetesManifest@1
+              inputs:
+                action: deploy
+                kubernetesServiceConnection: aks-dev
+                namespace: hospital
+                manifests: ${{ service }}/k8s/deployment.yaml
+                containers: myacr.azurecr.io/${{ lower(service) }}:$(Build.BuildId)
