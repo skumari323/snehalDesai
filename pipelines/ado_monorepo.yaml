@@ -1,0 +1,198 @@
+Let's say you have:
+
+1 React/Angular frontend
+6 independent .NET APIs
+
+
+hospital-system/
+│
+├── Frontend/
+│
+├── PatientApi/
+│
+├── DoctorApi/
+│
+├── AppointmentApi/
+│
+├── BillingApi/
+│
+├── PharmacyApi/
+│
+├── NotificationApi/
+│
+└── azure-pipelines.yml
+
+
+# The pipeline should
+
+Checkout Code
+      │
+      ▼
+Detect Changed Files
+      │
+      ▼
+Build Frontend?         (if Frontend changed)
+Build PatientApi?       (if PatientApi changed)
+Build DoctorApi?        (if DoctorApi changed)
+Build AppointmentApi?   (if AppointmentApi changed)
+Build BillingApi?       (if BillingApi changed)
+Build PharmacyApi?      (if PharmacyApi changed)
+Build NotificationApi?  (if NotificationApi changed)
+
+e.g developer changes DoctorApi/DoctorController.cs
+
+# pipeline would run and will skip these stages 
+
+Skipped:
+- Frontend
+- PatientApi
+- AppointmentApi
+- BillingApi
+- PharmacyApi
+- NotificationApi
+
+
+#####################
+# pipeline for monorepo
+#######################
+
+
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+
+# ==========================================
+# Detect what changed
+# ==========================================
+- stage: DetectChanges
+  jobs:
+  - job: Detect
+    steps:
+
+    - checkout: self
+      fetchDepth: 0   #fetch entire git history
+
+    - bash: |
+
+        echo "Finding changed files..."
+
+        CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+
+        echo "$CHANGED_FILES"
+
+        # Default everything to false
+        echo "##vso[task.setvariable variable=FrontendChanged;isOutput=true]false"
+        echo "##vso[task.setvariable variable=PatientChanged;isOutput=true]false"
+        echo "##vso[task.setvariable variable=DoctorChanged;isOutput=true]false"
+        echo "##vso[task.setvariable variable=AppointmentChanged;isOutput=true]false"
+        echo "##vso[task.setvariable variable=BillingChanged;isOutput=true]false"
+        echo "##vso[task.setvariable variable=PharmacyChanged;isOutput=true]false"
+        echo "##vso[task.setvariable variable=NotificationChanged;isOutput=true]false"
+
+        if echo "$CHANGED_FILES" | grep -q "^Frontend/"; then
+          echo "Frontend changed"
+          echo "##vso[task.setvariable variable=FrontendChanged;isOutput=true]true"
+        fi
+
+        if echo "$CHANGED_FILES" | grep -q "^PatientApi/"; then
+          echo "PatientApi changed"
+          echo "##vso[task.setvariable variable=PatientChanged;isOutput=true]true"
+        fi
+
+        if echo "$CHANGED_FILES" | grep -q "^DoctorApi/"; then
+          echo "DoctorApi changed"
+          echo "##vso[task.setvariable variable=DoctorChanged;isOutput=true]true"
+        fi
+
+        if echo "$CHANGED_FILES" | grep -q "^AppointmentApi/"; then
+          echo "AppointmentApi changed"
+          echo "##vso[task.setvariable variable=AppointmentChanged;isOutput=true]true"
+        fi
+
+        if echo "$CHANGED_FILES" | grep -q "^BillingApi/"; then
+          echo "BillingApi changed"
+          echo "##vso[task.setvariable variable=BillingChanged;isOutput=true]true"
+        fi
+
+        if echo "$CHANGED_FILES" | grep -q "^PharmacyApi/"; then
+          echo "PharmacyApi changed"
+          echo "##vso[task.setvariable variable=PharmacyChanged;isOutput=true]true"
+        fi
+
+        if echo "$CHANGED_FILES" | grep -q "^NotificationApi/"; then
+          echo "NotificationApi changed"
+          echo "##vso[task.setvariable variable=NotificationChanged;isOutput=true]true"
+        fi
+
+      name: DetectChanges
+
+
+# ==========================================
+# Build
+# ==========================================
+- stage: Build
+  dependsOn: DetectChanges
+
+  variables:
+    FrontendChanged: $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.FrontendChanged'] ]
+    PatientChanged: $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.PatientChanged'] ]
+    DoctorChanged: $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.DoctorChanged'] ]
+    AppointmentChanged: $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.AppointmentChanged'] ]
+    BillingChanged: $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.BillingChanged'] ]
+    PharmacyChanged: $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.PharmacyChanged'] ]
+    NotificationChanged: $[ stageDependencies.DetectChanges.Detect.outputs['DetectChanges.NotificationChanged'] ]
+
+  jobs:
+
+  - job: Frontend
+    condition: eq(variables.FrontendChanged, 'true')
+    steps:
+    - script: |
+        npm install
+        npm run build
+
+  - job: PatientApi
+    condition: eq(variables.PatientChanged, 'true')
+    steps:
+    - script: |
+        dotnet restore PatientApi/PatientApi.csproj
+        dotnet build PatientApi/PatientApi.csproj -c Release
+
+  - job: DoctorApi
+    condition: eq(variables.DoctorChanged, 'true')
+    steps:
+    - script: |
+        dotnet restore DoctorApi/DoctorApi.csproj
+        dotnet build DoctorApi/DoctorApi.csproj -c Release
+
+  - job: AppointmentApi
+    condition: eq(variables.AppointmentChanged, 'true')
+    steps:
+    - script: |
+        dotnet restore AppointmentApi/AppointmentApi.csproj
+        dotnet build AppointmentApi/AppointmentApi.csproj -c Release
+
+  - job: BillingApi
+    condition: eq(variables.BillingChanged, 'true')
+    steps:
+    - script: |
+        dotnet restore BillingApi/BillingApi.csproj
+        dotnet build BillingApi/BillingApi.csproj -c Release
+
+  - job: PharmacyApi
+    condition: eq(variables.PharmacyChanged, 'true')
+    steps:
+    - script: |
+        dotnet restore PharmacyApi/PharmacyApi.csproj
+        dotnet build PharmacyApi/PharmacyApi.csproj -c Release
+
+  - job: NotificationApi
+    condition: eq(variables.NotificationChanged, 'true')
+    steps:
+    - script: |
+        dotnet restore NotificationApi/NotificationApi.csproj
+        dotnet build NotificationApi/NotificationApi.csproj -c Release
