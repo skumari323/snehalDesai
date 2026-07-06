@@ -1,0 +1,64 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Restore') {
+            steps {
+                echo 'Restoring NuGet packages...'
+                sh 'dotnet restore'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                echo 'Building the project...'
+                sh 'dotnet build --no-restore -c Release'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                echo 'Running SonarQube analysis...'
+                withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                    withSonarQubeEnv('SonarQubeServer1') {
+                        sh """
+                            dotnet sonarscanner begin /k:"sampleapp" /d:sonar.host.url=$SONAR_HOST_URL /d:sonar.login=$SONAR_TOKEN
+                            dotnet build --no-restore -c Release
+                            dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                echo 'Checking SonarQube Quality Gate...'
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Publish Artifacts') {
+            steps {
+                echo 'Publishing build artifacts...'
+                sh 'dotnet publish -c Release -o publish'
+                archiveArtifacts artifacts: 'publish/**', fingerprint: true
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Cleaning workspace...'
+            cleanWs()
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}

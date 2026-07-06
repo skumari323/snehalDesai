@@ -1,0 +1,48 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: 'master', url: 'https://github.com/skumari323/snehalDesai.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'dotnet build'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'dotnet test || true'
+            }
+        }
+
+        // 👇 ADD YOUR APPROVAL STAGE HERE
+        stage('Approval') {
+            steps {
+                input message: "Deploy to production?"
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh 'kubectl apply -f deployment.yaml'
+            }
+        }
+    }
+}
+stage('Approval for Prod') {
+    steps {
+        input message: "Approve production deployment?"
+    }
+}
+
+stage('Deploy Prod') {
+    steps {
+        sh 'kubectl apply -f deployment-prod.yaml'
+    }
+}
