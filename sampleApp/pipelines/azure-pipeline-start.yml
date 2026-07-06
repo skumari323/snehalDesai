@@ -1,0 +1,76 @@
+trigger:
+ branches:
+   include:
+     - master
+
+variables:
+  - group: buildvargroup
+
+pool:
+ name: newagent
+#  demands:
+#   - agent.name -equals ubuntu
+
+resources:
+  repositories:
+    - repository: helmcharts
+      type: git
+      name: projectdevops/helmcharts
+      ref: master
+
+stages:
+
+  - template: templates/stage/dotnetbuild.yaml
+
+
+
+  - stage: docker_build
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
+    jobs:
+      - job: docker_build
+        steps:
+        - checkout: self
+        - task: Bash@3
+          displayName: Docker_build_and_push
+          inputs:
+            targetType: 'inline'
+            script: |
+               echo $(DOCKER-PASSWORD) | docker login -u $(DOCKER-USERNAME) --password-stdin
+               docker build -t sampleapp:$(Build.BuildNumber) .
+               docker tag sampleapp:$(Build.BuildNumber) $(DOCKER-USERNAME)/sampleapp:$(Build.BuildNumber) 
+               docker push $(DOCKER-USERNAME)/sampleapp:$(Build.BuildNumber) 
+
+  - stage: az_login    
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
+    jobs:
+      - job: az_login
+        steps:
+          - checkout: none 
+          - script: |
+              az login --service-principal -u $AZURE_APP_ID -p $AZURE_PASSWORD --tenant $AZURE_TENANT 
+
+      - job: aks_login
+        steps:
+          - checkout: none 
+          - script: |
+              az aks get-credentials --resource-group rg-dev-flux --name aks-dev-flux-cluster --overwrite-existing 
+              kubectl get pods -n default
+
+
+
+  - stage: deployment
+    displayName: Deploy to AKS  
+    condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')  
+    jobs:
+      - deployment: deploy_to_aks
+        displayName: Deploy to AKS
+        environment: aks-dev 
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - checkout: helmcharts
+                - script: |                    
+                    cd helmcharts/sampleapp
+                    helm upgrade --install sampleapp -n devops . --set image.tag=$(Build.BuildNumber)

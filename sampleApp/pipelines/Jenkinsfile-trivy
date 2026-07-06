@@ -1,0 +1,163 @@
+def buildTag = ''
+
+pipeline {
+    agent { label 'build-agent' }
+
+
+    stages {
+        stage('Generate Tag') {
+            steps {
+                script {
+                    def date = new Date().format('yyyyMMdd')
+                    buildTag = "${date}.${env.BUILD_NUMBER}"
+                    currentBuild.displayName = buildTag
+                    sh "echo BUILD_TAG=${buildTag} > build.env"
+                }
+            }
+        }
+
+        stage('Use Tag') {
+            steps {
+                script {
+                    echo "The build tag is: ${buildTag}"
+                }
+            }
+        }
+
+        stage('Checkout Code') {
+            steps {
+                git url: 'https://github.com/gititc778/sampleApp.git', branch: 'master'
+            }
+        }
+
+        stage('Restore') {
+            steps {
+                sh 'dotnet restore'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'dotnet build --no-restore -c Release'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('MySonarServer') {
+                    sh """
+                        dotnet sonarscanner begin /k:"sampleapp" /d:sonar.login=$SONAR_AUTH_TOKEN
+                        dotnet build --no-restore -c Release
+                        dotnet sonarscanner end /d:sonar.login=$SONAR_AUTH_TOKEN
+                    """
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh "docker build -t sampleapp:${buildTag} ."
+                }
+            }
+        }
+
+        //  Trivy with HTML report
+        stage('Trivy Scan') {
+            steps {
+                echo 'Preparing Trivy template...'
+                sh '''
+                    mkdir -p contrib
+                    curl -s -o contrib/html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
+                '''
+
+                echo 'Running Trivy scan...'
+                sh """
+                    trivy image --scanners vuln \
+                    --format template \
+                    --template "@contrib/html.tpl" \
+                    -o trivy-report.html \
+                    sampleapp:${buildTag}
+                """
+            }
+
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
+
+                    publishHTML([
+                        reportDir: '.',
+                        reportFiles: 'trivy-report.html',
+                        reportName: 'Trivy Security Report'
+                    ])
+                }
+            }
+        }
+
+        stage('Push to Docker Registry') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-login-itc', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    script {
+                        sh """
+                            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
+                            docker tag sampleapp:${buildTag} ${DOCKER_USER}/sampleapp:${buildTag}
+                            docker push ${DOCKER_USER}/sampleapp:${buildTag}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Login to Azure and AKS') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'aks-login', usernameVariable: 'AZURE_CLIENT_ID', passwordVariable: 'AZURE_CLIENT_SECRET')]) {
+                    sh """
+                        az logout || true
+                        az login --service-principal \
+                                 -u "$AZURE_CLIENT_ID" \
+                                 -p "$AZURE_CLIENT_SECRET" \
+                                 --tenant 2b32b1fa-7899-482e-a6de-be99c0ff5516
+
+                        az aks get-credentials \
+                            --resource-group rg-dev-flux \
+                            --name aks-ne-itc-01 \
+                            --overwrite-existing
+
+                        kubelogin convert-kubeconfig -l azurecli
+
+                        kubectl get pods -n default
+                    """
+                }
+            }
+        }
+
+        stage('Deploy to AKS') {
+            steps {
+                sh """
+                     helm upgrade --install sampleapp ./helm/sampleapp --set image.tag=${buildTag}
+                """
+            }
+        }
+
+        stage('Publish Artifacts') {
+            steps {
+                sh 'dotnet publish -c Release -o publish'
+                archiveArtifacts artifacts: 'publish/**', fingerprint: true
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+
+}
