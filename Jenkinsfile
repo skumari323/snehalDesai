@@ -1,110 +1,64 @@
-def buildTag = ''
-
 pipeline {
-    agent { label 'build-agent-01' }
+    agent any
+
 
 
     stages {
-        stage('Generate Tag') {
+
+        stage('Checkout') {
             steps {
-                script {
-                    def date = new Date().format('yyyyMMdd')
-                    buildTag = "${date}.${env.BUILD_NUMBER}"
-                    currentBuild.displayName = buildTag
-                    sh "echo BUILD_TAG=${buildTag} > build.env"
-                }
+                git url: 'https://github.com/skumari323/snehalDesai.git', branch: 'main'
             }
         }
 
-        stage('Use Tag') {
+        
+
+        stage('Docker Build') {
             steps {
-                script {
-                    echo "The build tag is: ${buildTag}"
-                }
-            }
-        }
-
-        stage('Checkout Code') {
-            steps {
-                git url: 'https://github.com/gititc778/sampleApp.git', branch: 'master'
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('MySonarServer') {
-                    sh '''
-                        export PATH=$PATH:/home/danish/.dotnet/tools
-
-                        dotnet sonarscanner begin /k:"sampleapp"
-
-                        dotnet build -c Release
-
-                        dotnet sonarscanner end
-                    '''
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    sh "docker build -t sampleapp:${buildTag} ."
-                }
-            }
-        }
-
-        //  Trivy with HTML report
-        stage('Trivy Scan') {
-            steps {
-                echo 'Preparing Trivy template...'
                 sh '''
-                    mkdir -p contrib
-                    curl -s -o contrib/html.tpl https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl
+                docker build -t sampleapp:v10.5 .
                 '''
-
-                echo 'Running Trivy scan...'
-                sh """
-                    trivy image --scanners vuln \
-                    --format template \
-                    --template "@contrib/html.tpl" \
-                    -o trivy-report.html \
-                    sampleapp:${buildTag}
-                """
             }
+        }
+stage('Docker Push') {
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'dockerhub-creds',
+            usernameVariable: 'USER',
+            passwordVariable: 'PASS'
+        )]) {
+            sh '''
+            echo $PASS | docker login -u $USER --password-stdin
 
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-report.html', fingerprint: true
+            docker build -t sampleapp:v10.5 .
 
-                    publishHTML([
-                        reportDir: '.',
-                        reportFiles: 'trivy-report.html',
-                        reportName: 'Trivy Security Report'
-                    ])
-                }
+            docker tag sampleapp:v10.5 $USER/sampleapp:v10.5
+
+            docker push $USER/sampleapp:v10.5
+            '''
+        }
+    }
+}
+
+        stage('Deploy to Minikube') {
+            steps {
+                sh '''
+                kubectl apply -f deployment.yaml 
+                '''
             }
         }
 
-        stage('Push to Docker Registry') {
+        stage('Approve PROD') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-login-itc', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    script {
-                        sh """
-                            echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
-                            docker tag sampleapp:${buildTag} ${DOCKER_USER}/sampleapp:${buildTag}
-                            docker push ${DOCKER_USER}/sampleapp:${buildTag}
-                        """
-                    }
-                }
+                input message: "Deploy to PROD?"
+            }
+        }
+
+        stage('Deploy PROD') {
+            steps {
+                sh '''
+                kubectl apply -f prod.yaml
+                '''
             }
         }
     }
